@@ -90,7 +90,7 @@ Pathfinder TN includes data from Tunisia's top engineering institutions:
 ## 🚀 Quick Start
 
 ### For Users
-1. Visit the live site: `https://YOUR_USERNAME.github.io/pathfinder-tn`
+1. Visit the live site: `https://mayssascat.github.io/pathfinder-tn`
 2. Click **"Start Pathfinder"**
 3. Get a free API key from [console.groq.com/keys](https://console.groq.com/keys) (takes 30 seconds)
 4. Paste your key and take the 6-question quiz
@@ -100,7 +100,7 @@ Pathfinder TN includes data from Tunisia's top engineering institutions:
 
 ```bash
 # Clone the repo
-git clone https://github.com/YOUR_USERNAME/pathfinder-tn.git
+git clone https://github.com/mayssascat/pathfinder-tn.git
 cd pathfinder-tn
 
 # Open with Live Server (VS Code extension) or any static server
