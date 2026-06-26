@@ -199,7 +199,7 @@ copies or substantial portions of the Software.
 
 Have questions or feedback?
 
-- Open an [Issue](https://github.com/YOUR_USERNAME/pathfinder-tn/issues)
+- Open an [Issue](https://github.com/mayssascat/pathfinder-tn/issues)
 - Or reach out on [LinkedIn / Twitter / Email]
 
 ---
