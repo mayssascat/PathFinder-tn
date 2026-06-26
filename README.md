@@ -1,7 +1,7 @@
 # 🧭 Pathfinder TN
 
 > **An AI-powered career guidance platform built for Tunisian engineering students.**
-> https://mayssascat.github.io/pathfinder-tn
+> https://mayssascat.github.io/PathFinder-tn/
 
 [![Live Demo](https://img.shields.io/badge/🔗-Live%20Demo-gold?style=for-the-badge)](https://YOUR_USERNAME.github.io/pathfinder-tn)
 [![Made for Tunisia](https://img.shields.io/badge/🇹🇳-Made%20for%20Tunisia-cyan?style=for-the-badge)]()
