@@ -1,13 +1,16 @@
 // ============================================================
-// PATHFINDER TN — app.js (Production Ready - Public Deploy)
+// PATHFINDER TN — app.js (v2.0 with Tech Today Magazine)
 // Features:
-//   - User provides their own Groq API key (secure)
-//   - Direct API call to Groq (no server needed)
-//   - Local scoring fallback if API fails
-//   - Fully static — deployable to GitHub Pages / Netlify
+//   - AI-powered career quiz (Groq API)
+//   - 28 engineering field guides
+//   - Tech Today magazine with articles
+//   - Article editor for user submissions
+//   - Medium/Substack-style reading experience
 // ============================================================
 
 let engineeringFieldsData = {};
+let articlesData = [];
+let userArticles = [];
 
 // ── API KEY MANAGEMENT ──────────────────────────────────────
 function getGroqKey() {
@@ -19,11 +22,70 @@ function clearApiKey() {
   sessionStorage.removeItem('groq_api_key');
 }
 
+// ── USER ARTICLES (LocalStorage) ────────────────────────────
+function loadUserArticles() {
+  try {
+    const stored = localStorage.getItem('pathfinder_user_articles');
+    if (stored) {
+      userArticles = JSON.parse(stored);
+    }
+  } catch (e) {
+    userArticles = [];
+  }
+}
+
+function saveUserArticles() {
+  localStorage.setItem('pathfinder_user_articles', JSON.stringify(userArticles));
+}
+
+function addUserArticle(article) {
+  article.id = 'user_' + Date.now();
+  article.date = new Date().toISOString().split('T')[0];
+  article.readTime = Math.ceil(article.content.split(' ').length / 200) + ' min read';
+  article.author = article.author || 'Anonymous';
+  article.isUserArticle = true;
+  userArticles.unshift(article);
+  saveUserArticles();
+  return article.id;
+}
+
+function updateUserArticle(id, updates) {
+  const idx = userArticles.findIndex(a => a.id === id);
+  if (idx !== -1) {
+    userArticles[idx] = { ...userArticles[idx], ...updates };
+    saveUserArticles();
+    return true;
+  }
+  return false;
+}
+
+function deleteUserArticle(id) {
+  userArticles = userArticles.filter(a => a.id !== id);
+  saveUserArticles();
+}
+
+function getAllArticles() {
+  return [...articlesData, ...userArticles];
+}
+
+function getArticleById(id) {
+  return getAllArticles().find(a => a.id === id);
+}
+
 // ── 1. LOAD DATA ─────────────────────────────────────────────
 async function initApp() {
   try {
     const response = await fetch('data.json');
-    engineeringFieldsData = await response.json();
+    const data = await response.json();
+
+    // Extract articles and fields
+    articlesData = data.articles || [];
+    delete data.articles;
+    engineeringFieldsData = data;
+
+    // Load user articles from localStorage
+    loadUserArticles();
+
     showPage('home');
   } catch (err) {
     document.getElementById('app').innerHTML = `
@@ -56,14 +118,20 @@ function showPage(pageName, subParam = null) {
     initQuiz();
 
   } else if (pageName === 'tech') {
-    app.innerHTML = `
-      <div class="coming-soon">
-        <h2>📡 TECH TODAY</h2>
-        <p>
-          The technology magazine is coming soon.<br>
-          Check back for the latest breakthroughs shaping engineering in 2026.
-        </p>
-      </div>`;
+    if (subParam) {
+      if (subParam === 'editor') {
+        app.innerHTML = `<div class="page-container">${getArticleEditorPage()}</div>`;
+        initArticleEditor();
+      } else if (subParam.startsWith('edit_')) {
+        const articleId = subParam.replace('edit_', '');
+        app.innerHTML = `<div class="page-container">${getArticleEditorPage(articleId)}</div>`;
+        initArticleEditor(articleId);
+      } else {
+        app.innerHTML = `<div class="page-container">${getArticleReaderPage(subParam)}</div>`;
+      }
+    } else {
+      app.innerHTML = `<div class="page-container">${getTechTodayPage()}</div>`;
+    }
   }
 }
 
@@ -123,8 +191,8 @@ function getHomePage() {
             </div>
             <div class="card-back">
               <div class="card-desc">
-                The technologies shaping engineering right now — AI,
-                energy, robotics, and what is coming next.
+                The latest in AI, energy, robotics, and more. Read curated
+                articles or write your own.
               </div>
               <div class="card-arrow">→ OPEN MAGAZINE</div>
             </div>
@@ -254,6 +322,603 @@ function getFieldDetailPage(fieldKey) {
     </div>`;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// TECH TODAY MAGAZINE
+// ═══════════════════════════════════════════════════════════════
+
+function getTechTodayPage() {
+  const allArticles = getAllArticles();
+  const featured = allArticles.find(a => a.featured) || allArticles[0];
+  const others = allArticles.filter(a => a.id !== featured.id);
+
+  // Featured article hero
+  const featuredHTML = featured ? `
+    <div class="article-hero" onclick="showPage('tech', '${featured.id}')">
+      <div class="article-hero-image" style="background-image: url('${featured.image}')">
+        <div class="article-hero-overlay"></div>
+      </div>
+      <div class="article-hero-content">
+        <span class="article-category">${featured.category}</span>
+        <h2 class="article-hero-title">${featured.title}</h2>
+        <p class="article-hero-subtitle">${featured.subtitle}</p>
+        <div class="article-meta">
+          <span>${featured.author}</span>
+          <span>•</span>
+          <span>${featured.date}</span>
+          <span>•</span>
+          <span>${featured.readTime}</span>
+          ${featured.isUserArticle ? '<span class="user-badge">✎ User Article</span>' : ''}
+        </div>
+      </div>
+    </div>
+  ` : '';
+
+  // Article grid
+  const articlesHTML = others.map(article => `
+    <div class="article-card ${article.isUserArticle ? 'user-article-card' : ''}" onclick="showPage('tech', '${article.id}')">
+      <div class="article-card-image" style="background-image: url('${article.image}')">
+        ${article.isUserArticle ? '<span class="user-article-badge">✎</span>' : ''}
+      </div>
+      <div class="article-card-content">
+        <span class="article-category-tag">${article.category}</span>
+        <h3 class="article-card-title">${article.title}</h3>
+        <p class="article-card-excerpt">${article.subtitle}</p>
+        <div class="article-card-meta">
+          <span>${article.author}</span>
+          <span>•</span>
+          <span>${article.readTime}</span>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  // Category filter tags
+  const categories = [...new Set(allArticles.map(a => a.category))];
+  const categoryTags = categories.map(cat => 
+    `<button class="category-tag" onclick="filterArticles('${cat}')">${cat}</button>`
+  ).join('');
+
+  return `
+    <section class="tech-today-section">
+      <header class="tech-today-header">
+        <h1 class="section-title">📡 <span class="accent">Tech Today</span></h1>
+        <p class="section-subtitle">
+          The latest breakthroughs in engineering and technology — curated for Tunisian students.
+          Read, learn, and share your own insights.
+        </p>
+      </header>
+
+      <div class="tech-today-actions">
+        <button class="write-article-btn" onclick="showPage('tech', 'editor')">
+          <span>✎</span> Write an Article
+        </button>
+      </div>
+
+      <div class="category-filter">
+        <button class="category-tag active" onclick="filterArticles('all')">All</button>
+        ${categoryTags}
+      </div>
+
+      ${featuredHTML}
+
+      <div class="articles-grid" id="articles-grid">
+        ${articlesHTML}
+      </div>
+
+      ${userArticles.length > 0 ? `
+        <div class="user-articles-section">
+          <h3 class="user-articles-heading">Your Articles</h3>
+          <p class="user-articles-hint">Click any article to edit or delete it</p>
+          <div class="user-articles-list">
+            ${userArticles.map(a => `
+              <div class="user-article-item">
+                <span onclick="showPage('tech', '${a.id}')">${a.title}</span>
+                <div class="user-article-actions">
+                  <button onclick="event.stopPropagation(); showPage('tech', 'edit_${a.id}')">Edit</button>
+                  <button onclick="event.stopPropagation(); deleteUserArticle('${a.id}'); showPage('tech');">Delete</button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+    </section>`;
+}
+
+function filterArticles(category) {
+  const allArticles = getAllArticles();
+  const filtered = category === 'all' ? allArticles : allArticles.filter(a => a.category === category);
+
+  // Update active button
+  document.querySelectorAll('.category-tag').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent === (category === 'all' ? 'All' : category));
+  });
+
+  const grid = document.getElementById('articles-grid');
+  if (!grid) return;
+
+  grid.innerHTML = filtered.filter(a => !a.featured).map(article => `
+    <div class="article-card ${article.isUserArticle ? 'user-article-card' : ''}" onclick="showPage('tech', '${article.id}')">
+      <div class="article-card-image" style="background-image: url('${article.image}')">
+        ${article.isUserArticle ? '<span class="user-article-badge">✎</span>' : ''}
+      </div>
+      <div class="article-card-content">
+        <span class="article-category-tag">${article.category}</span>
+        <h3 class="article-card-title">${article.title}</h3>
+        <p class="article-card-excerpt">${article.subtitle}</p>
+        <div class="article-card-meta">
+          <span>${article.author}</span>
+          <span>•</span>
+          <span>${article.readTime}</span>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── ARTICLE READER PAGE ─────────────────────────────────────
+function getArticleReaderPage(articleId) {
+  const article = getArticleById(articleId);
+  if (!article) return `<h2 style="padding:4rem 0;color:#e55;">Article not found</h2>`;
+
+  const contentHTML = article.content.map(block => {
+    switch (block.type) {
+      case 'paragraph':
+        return `<p class="article-paragraph">${block.text}</p>`;
+      case 'heading':
+        return `<h2 class="article-heading">${block.text}</h2>`;
+      case 'quote':
+        return `
+          <blockquote class="article-quote">
+            <p>"${block.text}"</p>
+            <cite>— ${block.author}</cite>
+          </blockquote>`;
+      case 'list':
+        return `<ul class="article-list">${block.items.map(item => `<li>${item}</li>`).join('')}</ul>`;
+      default:
+        return '';
+    }
+  }).join('');
+
+  const tagsHTML = article.tags ? article.tags.map(tag => `<span class="article-tag">${tag}</span>`).join('') : '';
+
+  return `
+    <article class="article-reader">
+      <button class="back-btn" onclick="showPage('tech')">← Back to Tech Today</button>
+
+      <header class="article-reader-header">
+        <div class="article-reader-image" style="background-image: url('${article.image}')">
+          <div class="article-reader-overlay"></div>
+        </div>
+        <div class="article-reader-header-content">
+          <span class="article-category">${article.category}</span>
+          <h1 class="article-reader-title">${article.title}</h1>
+          <p class="article-reader-subtitle">${article.subtitle}</p>
+          <div class="article-reader-meta">
+            <div class="author-info">
+              <div class="author-avatar">${article.author.charAt(0).toUpperCase()}</div>
+              <div class="author-details">
+                <span class="author-name">${article.author}</span>
+                <span class="author-date">${article.date} • ${article.readTime}</span>
+              </div>
+            </div>
+            ${article.isUserArticle ? '<span class="user-article-label">✎ User Article</span>' : ''}
+          </div>
+        </div>
+      </header>
+
+      <div class="article-reader-body">
+        ${contentHTML}
+      </div>
+
+      <div class="article-reader-footer">
+        <div class="article-tags">
+          ${tagsHTML}
+        </div>
+        <div class="article-actions">
+          <button class="article-action-btn" onclick="shareArticle('${article.id}')">
+            <span>🔗</span> Share
+          </button>
+          ${article.isUserArticle ? `
+            <button class="article-action-btn" onclick="showPage('tech', 'edit_${article.id}')">
+              <span>✎</span> Edit
+            </button>
+          ` : ''}
+        </div>
+      </div>
+
+      <div class="article-related">
+        <h3>More from Tech Today</h3>
+        <div class="related-articles">
+          ${getAllArticles().filter(a => a.id !== article.id).slice(0, 3).map(a => `
+            <div class="related-article-card" onclick="showPage('tech', '${a.id}')">
+              <div class="related-article-image" style="background-image: url('${a.image}')"></div>
+              <span class="related-article-category">${a.category}</span>
+              <h4>${a.title}</h4>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </article>`;
+}
+
+function shareArticle(articleId) {
+  const article = getArticleById(articleId);
+  if (!article) return;
+
+  const url = window.location.origin + window.location.pathname + '#tech-' + articleId;
+
+  if (navigator.share) {
+    navigator.share({
+      title: article.title,
+      text: article.subtitle,
+      url: url
+    });
+  } else {
+    navigator.clipboard.writeText(url).then(() => {
+      alert('Article link copied to clipboard!');
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ARTICLE EDITOR — Write & Edit Articles (Medium/Substack style)
+// ═══════════════════════════════════════════════════════════════
+
+let editorBlocks = [];
+let editingArticleId = null;
+
+function getArticleEditorPage(articleId = null) {
+  editingArticleId = articleId;
+  let article = null;
+
+  if (articleId) {
+    article = getArticleById(articleId);
+    if (!article) return `<h2 style="padding:4rem 0;color:#e55;">Article not found</h2>`;
+    if (!article.isUserArticle) return `<h2 style="padding:4rem 0;color:#e55;">Can only edit your own articles</h2>`;
+  }
+
+  const title = article ? article.title : '';
+  const subtitle = article ? article.subtitle : '';
+  const author = article ? article.author : '';
+  const category = article ? article.category : 'Technology';
+  const image = article ? article.image : '';
+
+  // Initialize editor blocks
+  if (article) {
+    editorBlocks = JSON.parse(JSON.stringify(article.content));
+  } else {
+    editorBlocks = [{ type: 'paragraph', text: '' }];
+  }
+
+  return `
+    <div class="article-editor">
+      <header class="editor-header">
+        <button class="back-btn" onclick="showPage('tech')">← Cancel</button>
+        <div class="editor-actions">
+          <button class="editor-btn-ghost" onclick="previewArticle()">👁 Preview</button>
+          <button class="editor-btn" onclick="publishArticle()">${articleId ? '💾 Update' : '🚀 Publish'}</button>
+        </div>
+      </header>
+
+      <div class="editor-main">
+        <div class="editor-metadata">
+          <input 
+            type="text" 
+            id="editor-title" 
+            class="editor-title-input" 
+            placeholder="Article Title"
+            value="${title.replace(/"/g, '&quot;')}"
+          >
+          <input 
+            type="text" 
+            id="editor-subtitle" 
+            class="editor-subtitle-input" 
+            placeholder="Subtitle — a one-line summary of your article"
+            value="${subtitle.replace(/"/g, '&quot;')}"
+          >
+          <div class="editor-meta-row">
+            <input 
+              type="text" 
+              id="editor-author" 
+              class="editor-author-input" 
+              placeholder="Your Name"
+              value="${author.replace(/"/g, '&quot;')}"
+            >
+            <select id="editor-category" class="editor-category-select">
+              <option value="Technology" ${category === 'Technology' ? 'selected' : ''}>Technology</option>
+              <option value="Artificial Intelligence" ${category === 'Artificial Intelligence' ? 'selected' : ''}>Artificial Intelligence</option>
+              <option value="Energy" ${category === 'Energy' ? 'selected' : ''}>Energy</option>
+              <option value="Automotive" ${category === 'Automotive' ? 'selected' : ''}>Automotive</option>
+              <option value="Quantum Tech" ${category === 'Quantum Tech' ? 'selected' : ''}>Quantum Tech</option>
+              <option value="Robotics" ${category === 'Robotics' ? 'selected' : ''}>Robotics</option>
+              <option value="Biotech" ${category === 'Biotech' ? 'selected' : ''}>Biotech</option>
+              <option value="Space" ${category === 'Space' ? 'selected' : ''}>Space</option>
+              <option value="Other" ${category === 'Other' ? 'selected' : ''}>Other</option>
+            </select>
+          </div>
+          <div class="editor-image-row">
+            <input 
+              type="text" 
+              id="editor-image" 
+              class="editor-image-input" 
+              placeholder="Cover image URL (Unsplash, etc.) — leave empty for random tech image"
+              value="${image.replace(/"/g, '&quot;')}"
+            >
+            <button class="editor-btn-ghost" onclick="randomUnsplashImage()">🎲 Random Image</button>
+          </div>
+        </div>
+
+        <div class="editor-toolbar">
+          <button onclick="addBlock('paragraph')" title="Paragraph">¶</button>
+          <button onclick="addBlock('heading')" title="Heading">H</button>
+          <button onclick="addBlock('quote')" title="Quote">❝</button>
+          <button onclick="addBlock('list')" title="List">☰</button>
+          <button onclick="addBlock('image')" title="Image">🖼</button>
+        </div>
+
+        <div class="editor-blocks" id="editor-blocks">
+          ${renderEditorBlocks()}
+        </div>
+
+        <button class="editor-add-block" onclick="addBlock('paragraph')">
+          + Add paragraph
+        </button>
+      </div>
+    </div>
+
+    <div id="editor-preview-modal" class="editor-preview-modal" style="display:none;">
+      <div class="editor-preview-content">
+        <button class="editor-preview-close" onclick="closePreview()">✕</button>
+        <div id="editor-preview-body"></div>
+      </div>
+    </div>`;
+}
+
+function initArticleEditor(articleId = null) {
+  // Blocks are already initialized in getArticleEditorPage
+  // This function is called after DOM is ready
+  renderEditorBlocks();
+}
+
+function renderEditorBlocks() {
+  return editorBlocks.map((block, idx) => {
+    switch (block.type) {
+      case 'paragraph':
+        return `
+          <div class="editor-block" data-index="${idx}">
+            <div class="editor-block-handle">¶</div>
+            <textarea 
+              class="editor-textarea" 
+              placeholder="Write your paragraph here..."
+              oninput="updateBlock(${idx}, this.value)"
+            >${block.text}</textarea>
+            <button class="editor-block-delete" onclick="deleteBlock(${idx})">🗑</button>
+          </div>`;
+      case 'heading':
+        return `
+          <div class="editor-block" data-index="${idx}">
+            <div class="editor-block-handle">H</div>
+            <input 
+              type="text" 
+              class="editor-heading-input" 
+              placeholder="Section Heading"
+              value="${block.text.replace(/"/g, '&quot;')}"
+              oninput="updateBlock(${idx}, this.value)"
+            >
+            <button class="editor-block-delete" onclick="deleteBlock(${idx})">🗑</button>
+          </div>`;
+      case 'quote':
+        return `
+          <div class="editor-block" data-index="${idx}">
+            <div class="editor-block-handle">❝</div>
+            <div class="editor-quote-inputs">
+              <textarea 
+                class="editor-textarea editor-quote-text" 
+                placeholder="Quote text..."
+                oninput="updateQuoteBlock(${idx}, 'text', this.value)"
+              >${block.text}</textarea>
+              <input 
+                type="text" 
+                class="editor-quote-author" 
+                placeholder="Quote author"
+                value="${(block.author || '').replace(/"/g, '&quot;')}"
+                oninput="updateQuoteBlock(${idx}, 'author', this.value)"
+              >
+            </div>
+            <button class="editor-block-delete" onclick="deleteBlock(${idx})">🗑</button>
+          </div>`;
+      case 'list':
+        return `
+          <div class="editor-block" data-index="${idx}">
+            <div class="editor-block-handle">☰</div>
+            <div class="editor-list-items">
+              ${(block.items || []).map((item, itemIdx) => `
+                <div class="editor-list-item">
+                  <span class="editor-list-bullet">•</span>
+                  <input 
+                    type="text" 
+                    value="${item.replace(/"/g, '&quot;')}" 
+                    oninput="updateListItem(${idx}, ${itemIdx}, this.value)"
+                  >
+                  <button onclick="removeListItem(${idx}, ${itemIdx})">✕</button>
+                </div>
+              `).join('')}
+              <button class="editor-add-list-item" onclick="addListItem(${idx})">+ Add item</button>
+            </div>
+            <button class="editor-block-delete" onclick="deleteBlock(${idx})">🗑</button>
+          </div>`;
+      case 'image':
+        return `
+          <div class="editor-block" data-index="${idx}">
+            <div class="editor-block-handle">🖼</div>
+            <div class="editor-image-inputs">
+              <input 
+                type="text" 
+                class="editor-image-url" 
+                placeholder="Image URL (Unsplash, etc.)"
+                value="${(block.url || '').replace(/"/g, '&quot;')}"
+                oninput="updateImageBlock(${idx}, this.value)"
+              >
+              <input 
+                type="text" 
+                class="editor-image-caption" 
+                placeholder="Image caption (optional)"
+                value="${(block.caption || '').replace(/"/g, '&quot;')}"
+                oninput="updateImageCaption(${idx}, this.value)"
+              >
+            </div>
+            <button class="editor-block-delete" onclick="deleteBlock(${idx})">🗑</button>
+          </div>`;
+      default:
+        return '';
+    }
+  }).join('');
+}
+
+function addBlock(type) {
+  const newBlock = { type };
+  if (type === 'paragraph') newBlock.text = '';
+  if (type === 'heading') newBlock.text = '';
+  if (type === 'quote') { newBlock.text = ''; newBlock.author = ''; }
+  if (type === 'list') newBlock.items = [''];
+  if (type === 'image') { newBlock.url = ''; newBlock.caption = ''; }
+
+  editorBlocks.push(newBlock);
+  refreshEditorBlocks();
+}
+
+function deleteBlock(index) {
+  editorBlocks.splice(index, 1);
+  refreshEditorBlocks();
+}
+
+function updateBlock(index, value) {
+  editorBlocks[index].text = value;
+}
+
+function updateQuoteBlock(index, field, value) {
+  editorBlocks[index][field] = value;
+}
+
+function updateListItem(blockIdx, itemIdx, value) {
+  editorBlocks[blockIdx].items[itemIdx] = value;
+}
+
+function addListItem(blockIdx) {
+  editorBlocks[blockIdx].items.push('');
+  refreshEditorBlocks();
+}
+
+function removeListItem(blockIdx, itemIdx) {
+  editorBlocks[blockIdx].items.splice(itemIdx, 1);
+  if (editorBlocks[blockIdx].items.length === 0) {
+    deleteBlock(blockIdx);
+  } else {
+    refreshEditorBlocks();
+  }
+}
+
+function updateImageBlock(index, value) {
+  editorBlocks[index].url = value;
+}
+
+function updateImageCaption(index, value) {
+  editorBlocks[index].caption = value;
+}
+
+function refreshEditorBlocks() {
+  const container = document.getElementById('editor-blocks');
+  if (container) {
+    container.innerHTML = renderEditorBlocks();
+  }
+}
+
+function randomUnsplashImage() {
+  const techImages = [
+    'https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200&h=600&fit=crop',
+    'https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&h=600&fit=crop',
+    'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=1200&h=600&fit=crop',
+    'https://images.unsplash.com/photo-1509391366360-2e959784a276?w=1200&h=600&fit=crop',
+    'https://images.unsplash.com/photo-1593941707882-a5bba14938c7?w=1200&h=600&fit=crop',
+    'https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=1200&h=600&fit=crop',
+    'https://images.unsplash.com/photo-1535378917042-10a22c95931a?w=1200&h=600&fit=crop',
+    'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1200&h=600&fit=crop'
+  ];
+  const random = techImages[Math.floor(Math.random() * techImages.length)];
+  const input = document.getElementById('editor-image');
+  if (input) input.value = random;
+}
+
+function previewArticle() {
+  const title = document.getElementById('editor-title').value;
+  const subtitle = document.getElementById('editor-subtitle').value;
+  const author = document.getElementById('editor-author').value;
+  const category = document.getElementById('editor-category').value;
+  const image = document.getElementById('editor-image').value || randomUnsplashImage();
+
+  const previewArticle = {
+    title, subtitle, author, category, image,
+    content: editorBlocks,
+    date: new Date().toISOString().split('T')[0],
+    readTime: Math.ceil(editorBlocks.reduce((acc, b) => acc + (b.text || '').split(' ').length, 0) / 200) + ' min read'
+  };
+
+  const modal = document.getElementById('editor-preview-modal');
+  const body = document.getElementById('editor-preview-body');
+
+  body.innerHTML = getArticleReaderPage('preview');
+  // Replace the content with preview
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = body.innerHTML;
+
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closePreview() {
+  const modal = document.getElementById('editor-preview-modal');
+  modal.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+function publishArticle() {
+  const title = document.getElementById('editor-title').value.trim();
+  const subtitle = document.getElementById('editor-subtitle').value.trim();
+  const author = document.getElementById('editor-author').value.trim();
+  const category = document.getElementById('editor-category').value;
+  const image = document.getElementById('editor-image').value.trim() || 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200&h=600&fit=crop';
+
+  if (!title) { alert('Please enter a title'); return; }
+  if (!subtitle) { alert('Please enter a subtitle'); return; }
+  if (!author) { alert('Please enter your name'); return; }
+  if (editorBlocks.length === 0 || editorBlocks.every(b => !b.text && !b.items)) {
+    alert('Please write some content'); return;
+  }
+
+  // Clean up empty blocks
+  const cleanBlocks = editorBlocks.filter(b => {
+    if (b.type === 'list') return b.items && b.items.some(i => i.trim());
+    return b.text && b.text.trim();
+  });
+
+  const article = {
+    title, subtitle, author, category, image,
+    content: cleanBlocks,
+    tags: [category]
+  };
+
+  if (editingArticleId) {
+    updateUserArticle(editingArticleId, article);
+    alert('Article updated successfully!');
+  } else {
+    const newId = addUserArticle(article);
+    alert('Article published successfully!');
+  }
+
+  showPage('tech');
+}
+
 // ── 6. PATHFINDER QUIZ ────────────────────────────────────────
 const QUIZ_QUESTIONS = [
   {
@@ -335,7 +1000,7 @@ function getPathfinderPage() {
       <div class="quiz-wrapper">
         <div class="quiz-api-setup">
           <h2>🔑 API Key Required</h2>
-          <p>Pathfinder uses AI to give personalized recommendations. You\'ll need a free Groq API key.</p>
+          <p>Pathfinder uses AI to give personalized recommendations. You'll need a free Groq API key.</p>
           <ol style="text-align:left; color:var(--text-muted); font-size:0.9rem; line-height:1.8; margin:1.5rem 0;">
             <li>Go to <a href="https://console.groq.com/keys" target="_blank" style="color:var(--accent-cyan);">console.groq.com/keys</a></li>
             <li>Create a free account (takes 30 seconds)</li>
